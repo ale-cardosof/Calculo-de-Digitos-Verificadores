@@ -4,7 +4,7 @@
 #include <thread> 
 
 #define ESCRITA 0
-#define NOME_BASE "base.txt"
+#define NOME_BASE "base_dados.txt"
 
 using namespace std;
 
