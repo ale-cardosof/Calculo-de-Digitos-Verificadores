@@ -1,0 +1,194 @@
+#include <stdio.h> 
+#include <unistd.h> 
+#include <time.h>
+#include <thread> 
+
+#define ESCRITA 0
+
+using namespace std;
+
+FILE *Arquivo;
+FILE *ArquivoSaida;
+
+char PonteiroEscrita[16];
+char Dados[10006060][16];
+char CPFs[10006060][16];
+char CNPJs[10006060][16];
+int qntdCPFS=0, qntdCNPJS=0;
+char *result;
+int ponteiroDados = 0;
+int dadosLidos = 0;
+int percentualLido = 0;
+
+// Variáveis para cálculo de tempo
+clock_t Ticks[5];
+double TempoTotal,TempoAbertura,TempoLeitura,TempoCalculo;
+
+bool abreArquivo();
+void leituraDoArquivo(FILE *Arquivo);
+void calculaCPFS();
+void calculaCNPJS();
+void calculaDacCPF(char *Dado); 
+void calculaDacCNPJ(char *Dado); 
+void escreveNoArquivo(char *Dado); 
+
+int main(int argc, char *argv[]) { 
+	
+    Ticks[0] = clock();
+	
+	// Abre a base
+	if (!abreArquivo()){
+	    printf("ERRO 00: Erro na abertura da base. \n\n");
+	}else{
+		// Armazena os dados na matriz
+		Ticks[1] = clock();
+		leituraDoArquivo(Arquivo);
+		Ticks[2] = clock();
+		
+		// Separa processamento em duas threads: uma para o CPF e outra para CNPJ 	
+		std::thread cpfs (calculaCPFS);
+    	std::thread second (calculaCNPJS);
+    	cpfs.join();                
+    	second.join(); 	
+    	
+		//calculaCPFS();
+		//calculaCNPJS();
+		Ticks[3] = clock();
+	}	
+	Ticks[4] = clock();
+    TempoTotal = ((Ticks[3] - Ticks[0]) * 1000.0 / CLOCKS_PER_SEC)*0.001;
+    TempoAbertura = ((Ticks[1] - Ticks[0]) * 1000.0 / CLOCKS_PER_SEC)*0.001;
+    TempoLeitura = ((Ticks[2] - Ticks[1]) * 1000.0 / CLOCKS_PER_SEC)*0.001;
+    TempoCalculo = ((Ticks[3] - Ticks[2]) * 1000.0 / CLOCKS_PER_SEC)*0.001;
+    system("cls");
+    printf("Lendo o arquivo... %d%% processado (%d linhas lidas). \n", 100, dadosLidos);
+	printf("Processamento concluido. \n\n\n");
+	printf("----------------------- RELATORIO FINAL -----------------------\n\n");
+	printf("-------- Numero total linhas: %d \n", dadosLidos);
+	printf("      ||_____ Numero de CPFs: %d \n", qntdCPFS);
+	printf("      |_____ Numero de CNPJs: %d \n", qntdCNPJS);
+    printf("---------- Tempo total gasto: %g segundos.\n", TempoTotal);
+    printf("       |||___ Tempo abertura: %g segundos.\n", TempoAbertura);
+    printf("       ||_____ Tempo leitura: %g segundos.\n", TempoLeitura);
+    printf("       |______ Tempo calculo: %g segundos.\n", TempoCalculo);
+	printf("\n\n");
+	return(0); 
+} 
+
+bool abreArquivo(){
+	Arquivo = fopen("BASE.txt", "rt");
+	if (Arquivo == NULL){
+	    return false;
+	}else{
+		return true;
+	}
+}
+void leituraDoArquivo(FILE *Arquivo){
+	printf("Lendo o arquivo...\n");
+	while (!feof(Arquivo)){
+		
+		// Lê uma linha e armazena na matriz
+		result = fgets(Dados[ponteiroDados], 100, Arquivo);  // lê até o '\n' e caso não encontre, retorna FALSE
+		
+		// Se foi possível ler
+		if (result){
+			/* Indica percentual concluido de tempos em tempos */
+			if ((dadosLidos % 100000) == 0 && dadosLidos != 0){
+				system("cls");
+				percentualLido = (dadosLidos*100)/10006060;
+				printf("Lendo o arquivo... %d%% processado (%d linhas lidas).\n", percentualLido, dadosLidos);
+			}
+			// Itera o ponteiro e o número de linhas lidas	
+			ponteiroDados++;
+			dadosLidos++;
+		}	
+	}
+	
+	// Separa CPFs e CPJs
+	for(int i=0;i < dadosLidos;i++){
+		if(Dados[i][0] == ' '){
+			for(int j=0;j < 16;j++){
+				CNPJs[qntdCNPJS][j] = Dados[i][j];
+			}
+			qntdCNPJS++;
+		}else{
+			for(int j=0;j < 16;j++){
+				CPFs[qntdCPFS][j] = Dados[i][j];
+			}
+			qntdCPFS++;
+		}
+	}
+	
+	
+	// Indica fim da leitura
+	system("cls");
+	printf("Lendo o arquivo... %d%% processado (%d linhas lidas). \n", 100, dadosLidos);
+	fclose(Arquivo);
+}
+void calculaCPFS(){
+	/* Percorre a matriz de CPFS */
+	for(int i=0;i < qntdCPFS;i++){
+		if(i % 1000000 == 0){
+			printf("%d CPFs lidos.", i);
+		}
+		calculaDacCPF(CPFs[i]);
+	}
+}
+void calculaCNPJS(){
+	/* Percorre a matriz de CNPJS */
+	for(int i=0;i < qntdCNPJS;i++){
+		if(i % 1000000 == 0){
+			printf("%d CNPJs lidos.", i);
+		}
+		calculaDacCNPJ(CNPJs[i]);
+	}
+}
+void calculaDacCPF(char *Dado){
+	// Calculo do Primeiro Digito
+	int somaMulti =  ((Dado[3] - 48)*10) + ((Dado[4] - 48)*9) + ((Dado[5] - 48)*8) + ((Dado[6] - 48)*7) + ((Dado[7] - 48)*6) + ((Dado[8] - 48)*5) + ((Dado[9] - 48)*4) + ((Dado[10] - 48)*3) + ((Dado[11] - 48)*2);
+	int primeiroDigito = 11 - somaMulti % 11;
+	if (primeiroDigito >= 10){
+		primeiroDigito = 0;
+	}
+	
+	// Calculo do Segundo Digito
+	somaMulti =  ((Dado[3] - 48)*11) + ((Dado[4] - 48)*10) + ((Dado[5] - 48)*9) + ((Dado[6] - 48)*8) + ((Dado[7] - 48)*7) + ((Dado[8] - 48)*6) + ((Dado[9] - 48)*5) + ((Dado[10] - 48)*4) + ((Dado[11] - 48)*3) + (primeiroDigito*2);
+	int segundoDigito = 11 - somaMulti % 11;
+	if (segundoDigito >= 10){
+		segundoDigito = 0;
+	}
+	
+	Dado[12] = primeiroDigito + 48;
+	Dado[13] = segundoDigito + 48;	
+	Dado[14] = '\n';
+	if (ESCRITA == 1){
+		escreveNoArquivo(Dado);
+	}
+}
+void calculaDacCNPJ(char *Dado){
+	// Calculo do Primeiro Digito
+	int somaMulti =  ((Dado[11] - 48)*2) + ((Dado[10] - 48)*3) + ((Dado[9] - 48)*4) + ((Dado[8] - 48)*5) + ((Dado[7] - 48)*6) + ((Dado[6] - 48)*7) + ((Dado[5] - 48)*8) + ((Dado[4] - 48)*9) + ((Dado[3] - 48)*2) + ((Dado[2] - 48)*3) + ((Dado[1] - 48)*4) + ((Dado[0] - 48)*5);
+	int primeiroDigito = 11 - somaMulti % 11;
+	if (primeiroDigito >= 10){
+		primeiroDigito = 0;
+	}
+	
+	// Calculo do Segundo Digito
+	somaMulti =  primeiroDigito*2 + ((Dado[11] - 48)*3) + ((Dado[10] - 48)*4) + ((Dado[9] - 48)*5) + ((Dado[8] - 48)*6) + ((Dado[7] - 48)*7) + ((Dado[6] - 48)*8) + ((Dado[5] - 48)*9) + ((Dado[4] - 48)*2) + ((Dado[3] - 48)*3) + ((Dado[2] - 48)*4) + ((Dado[1] - 48)*5) + ((Dado[0] - 48)*6);
+	int segundoDigito = 11 - somaMulti % 11;
+	if (segundoDigito >= 10){
+		segundoDigito = 0;
+	}
+	
+	Dado[12] = primeiroDigito + 48;
+	Dado[13] = segundoDigito + 48;	
+	Dado[14] = '\n';
+	if (ESCRITA == 1){
+		escreveNoArquivo(Dado);
+	}
+}
+void escreveNoArquivo(char *Dado){
+	ArquivoSaida = fopen("arquivoSaida.txt", "at"); 
+	fprintf(ArquivoSaida,Dado);
+	fclose(ArquivoSaida);
+}
